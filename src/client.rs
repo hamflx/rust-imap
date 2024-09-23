@@ -502,15 +502,17 @@ impl<T: Read + Write> Client<T> {
                     );
                     let data =
                         ok_or_unauth_client_err!(parse_authenticate_response(line_str), self);
-                    ok_or_unauth_client_err!(
-                        general_purpose::STANDARD_NO_PAD
-                            .decode(data)
-                            .map_err(|e| Error::Parse(ParseError::Authentication(
-                                data.to_string(),
-                                Some(e)
-                            ))),
-                        self
-                    )
+                    let decoding = general_purpose::STANDARD_NO_PAD
+                        .decode(data)
+                        .map_err(|e| {
+                            Error::Parse(ParseError::Authentication(data.to_string(), Some(e)))
+                        })
+                        .or_else(|err| {
+                            general_purpose::STANDARD.decode(data).map_err(|e| {
+                                Error::Parse(ParseError::Authentication(data.to_string(), Some(e)))
+                            })
+                        });
+                    ok_or_unauth_client_err!(decoding, self)
                 };
 
                 let raw_response = &authenticator.process(&challenge);
